@@ -36,7 +36,6 @@ func NewImportCommand() Command {
 		Usage: `Calculates the Merkle root from a CSV file.
 
 *Flags:*
-  --update: Update existing data. If not provided, new data will be imported.
   --epoch <number>: (Required) The epoch to process.`,
 		Execute: runImportCommand,
 	}
@@ -47,7 +46,6 @@ func runImportCommand(ctx CommandContext) (string, error) {
 	importFlagSet := flag.NewFlagSet("import", flag.ContinueOnError)
 
 	// 2. Define the flags.
-	updateFlag := importFlagSet.Bool("update", false, "Update latest merkle root. If not provided, new data will be imported.")
 	epoch := importFlagSet.Uint64("epoch", math.MaxUint64, "The epoch to process (required).")
 
 	// 3. Parse the arguments.
@@ -78,9 +76,8 @@ func runImportCommand(ctx CommandContext) (string, error) {
 
 	// Use a goroutine for the heavy lifting.
 	args := processImportArgs{
-		file:   *csvFile,
-		update: *updateFlag,
-		epoch:  *epoch,
+		file:  *csvFile,
+		epoch: *epoch,
 	}
 	go processImport(ctx, args)
 
@@ -89,9 +86,8 @@ func runImportCommand(ctx CommandContext) (string, error) {
 
 // processImport handles the downloading, processing, and posting the result.
 type processImportArgs struct {
-	file   slack.File
-	update bool
-	epoch  uint64
+	file  slack.File
+	epoch uint64
 }
 
 func processImport(ctx CommandContext, args processImportArgs) {
@@ -146,12 +142,7 @@ func processImport(ctx CommandContext, args processImportArgs) {
 	}
 
 	// 3. Dispatch to the correct handler
-	var handlerErr error
-	if args.update {
-		handlerErr = handleUpdate(ctx, merkleTree, args.epoch)
-	} else {
-		handlerErr = handleImport(ctx, merkleTree, args.epoch)
-	}
+	handlerErr := handleImport(ctx, merkleTree, args.epoch)
 
 	if handlerErr != nil {
 		slog.Error("Error processing merkletree", "error", handlerErr, "channel", channelID)
@@ -163,15 +154,6 @@ func processImport(ctx CommandContext, args processImportArgs) {
 	hexMerkleRoot := hexutil.Encode(merkleRoot)
 
 	postMessage(ctx.Client, channelID, "Merkle root successfully calculated: "+hexMerkleRoot, timestamp, MessageTypeInfo)
-}
-
-func handleUpdate(ctx CommandContext, merkleTree *MerkleTree, epoch uint64) error {
-	if err := MerkleTreeManager.Update(merkleTree, epoch); err != nil {
-		return err
-	}
-
-	slog.Info("Successfully calculated Merkle root for update", "channel", ctx.AppMentionEvent.Channel, "epoch", epoch)
-	return nil
 }
 
 func handleImport(ctx CommandContext, merkleTree *MerkleTree, epoch uint64) error {

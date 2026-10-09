@@ -732,7 +732,7 @@ func importAirdropHandler(c *gin.Context) {
 		proto.ErrorMsg(c, "failed to check epoch validity in database")
 		return
 	}
-	if exists {
+	if !exists {
 		proto.ErrorMsg(c, "epoch already exists in database")
 		return
 	}
@@ -791,10 +791,14 @@ func importAirdropHandler(c *gin.Context) {
 }
 
 func slackBotEventHandler(c *gin.Context) {
+	fmt.Println("GGGGGG")
 	config := &botConfig.Config{
 		BotToken:      os.Getenv("SLACK_BOT_TOKEN"),
 		SigningSecret: os.Getenv("SLACK_SIGNING_SECRET"),
 	}
+
+	fmt.Println(os.Getenv("SLACK_BOT_TOKEN"))
+	fmt.Println(os.Getenv("SLACK_SIGNING_SECRET"))
 
 	handler := bot.NewSlackEventHandler(config)
 
