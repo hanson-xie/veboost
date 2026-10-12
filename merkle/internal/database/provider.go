@@ -1,6 +1,10 @@
 package database
 
 import (
+	"fmt"
+	"math/big"
+	"strings"
+
 	"github.com/Bedrock-Technology/VeMerkle/internal/database/psql"
 	"github.com/sirupsen/logrus"
 )
@@ -177,6 +181,132 @@ func GetClaimedAirdropDataByEpoch(epoch uint64, claimed bool) ([]*psql.AirdropDa
 		return nil, err
 	}
 	return records, nil
+}
+
+// GetAvailableAirdropDataByEpoch returns unclaimed rows of the epoch with Amount set to the available amount.
+func GetAvailableAirdropDataByEpoch(epoch uint64) ([]*psql.AirdropData, error) {
+	db, err := GetDBConnection("postgres")
+	if err != nil {
+		return nil, err
+	}
+
+	var records []*psql.AirdropData
+	err = db.Select("id, epoch, address, claimed, COALESCE(available_amount, amount) AS amount").
+		Where("epoch = ? AND claimed = ? AND COALESCE(available_amount, amount) > 0", epoch, false).
+		Find(&records).Error
+	if err != nil {
+		return nil, err
+	}
+	return records, nil
+}
+
+// RefreshAvailableAmount computes available_amount for unclaimed rows of the epoch,
+// expiring balances that have not been claimed within the last window epochs.
+func RefreshAvailableAmount(epoch, window uint64) error {
+	db, err := GetDBConnection("postgres")
+	if err != nil {
+		return err
+	}
+
+	var current []*psql.AirdropData
+	if err := db.Where("epoch = ? AND claimed = ?", epoch, false).Find(&current).Error; err != nil {
+		return err
+	}
+	if len(current) == 0 {
+		return nil
+	}
+
+	available := make(map[int64]string, len(current))
+	if window == 0 || epoch <= window {
+		for _, r := range current {
+			available[r.ID] = r.Amount
+		}
+	} else {
+		start := epoch - window
+		var history []*psql.AirdropData
+		if err := db.Where("epoch >= ? AND epoch < ?", start, epoch).Find(&history).Error; err != nil {
+			return err
+		}
+
+		byAddr := make(map[string]map[uint64]*psql.AirdropData)
+		for _, r := range history {
+			addr := strings.ToLower(r.Address)
+			if byAddr[addr] == nil {
+				byAddr[addr] = make(map[uint64]*psql.AirdropData)
+			}
+			byAddr[addr][r.Epoch] = r
+		}
+
+		for _, r := range current {
+			v, err := computeAvailableAmount(r, byAddr[strings.ToLower(r.Address)], start, epoch)
+			if err != nil {
+				return err
+			}
+			available[r.ID] = v
+		}
+	}
+
+	tx := db.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+	for id, v := range available {
+		if err := tx.Model(&psql.AirdropData{}).Where("id = ?", id).Update("available_amount", v).Error; err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit().Error
+}
+
+// computeAvailableAmount applies the expiry rule; history holds the address rows in [start, epoch).
+func computeAvailableAmount(cur *psql.AirdropData, history map[uint64]*psql.AirdropData, start, epoch uint64) (string, error) {
+	for k := start; k < epoch; k++ {
+		// A claim or missing row means the balance was reset, so nothing older remains.
+		if r := history[k]; r == nil || r.Claimed {
+			return cur.Amount, nil
+		}
+	}
+
+	amount, err := parseAmount(cur.Amount)
+	if err != nil {
+		return "", err
+	}
+	base, err := parseAmount(history[start].Amount)
+	if err != nil {
+		return "", err
+	}
+	result := new(big.Int).Sub(amount, base)
+
+	// Add back amounts already expired in [start, epoch) so they are not deducted twice.
+	for k := start; k < epoch; k++ {
+		r := history[k]
+		if r.AvailableAmount == nil {
+			continue
+		}
+		a, err := parseAmount(r.Amount)
+		if err != nil {
+			return "", err
+		}
+		av, err := parseAmount(*r.AvailableAmount)
+		if err != nil {
+			return "", err
+		}
+		result.Add(result, a.Sub(a, av))
+	}
+
+	if result.Sign() < 0 {
+		result.SetInt64(0)
+	}
+	return result.String(), nil
+}
+
+func parseAmount(s string) (*big.Int, error) {
+	v, ok := new(big.Int).SetString(s, 10)
+	if !ok {
+		return nil, fmt.Errorf("invalid amount format: %s", s)
+	}
+	return v, nil
 }
 
 // DeleteAirdropDataByEpoch deletes all airdrop data for a specific epoch

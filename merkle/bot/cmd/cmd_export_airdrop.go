@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"strings"
 
+	"github.com/Bedrock-Technology/VeMerkle/internal/config"
 	"github.com/Bedrock-Technology/VeMerkle/internal/contracts"
 	"github.com/Bedrock-Technology/VeMerkle/internal/database"
 	"github.com/jszwec/csvutil"
@@ -103,8 +104,16 @@ func processExportAirdrop(ctx CommandContext, args processExportAirdropArgs) {
 	channelID := ctx.AppMentionEvent.Channel
 	timestamp := ctx.AppMentionEvent.TimeStamp
 
+	// 0. Refresh available amount of unclaimed addresses, expiring stale balances
+	expireEpochs := config.GetConfig().Airdrop.ExpireEpochs
+	if err := database.RefreshAvailableAmount(args.epoch-1, expireEpochs); err != nil {
+		slog.Error("Failed to refresh available amount", "error", err)
+		postMessage(ctx.Client, channelID, fmt.Sprintf("Failed to refresh available amount: %v", err), timestamp, MessageTypeError)
+		return
+	}
+
 	// 1. Get unclaimed airdrop data from database
-	unclaimedAirdropData, err := database.GetClaimedAirdropDataByEpoch(args.epoch-1, false)
+	unclaimedAirdropData, err := database.GetAvailableAirdropDataByEpoch(args.epoch - 1)
 	if err != nil {
 		slog.Error("Failed to get airdrop data", "error", err)
 		postMessage(ctx.Client, channelID, fmt.Sprintf("Failed to get airdrop data: %v", err), timestamp, MessageTypeError)

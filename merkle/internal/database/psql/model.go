@@ -8,6 +8,8 @@ type AirdropData struct {
 	Address   string `gorm:"not null;index:idx_epoch_user" json:"address"`
 	Amount    string `gorm:"type:numeric(78,0);not null" json:"amount"`
 	Claimed   bool   `gorm:"not null;default:false" json:"claimed"`
+	// NULL means not yet computed; treated as no expiry.
+	AvailableAmount *string `gorm:"type:numeric(78,0)" json:"availableAmount"`
 }
 
 type MerkleTreeData struct {

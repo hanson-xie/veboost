@@ -2,8 +2,9 @@ package config
 
 import (
 	"fmt"
-	"github.com/spf13/viper"
 	"sync"
+
+	"github.com/spf13/viper"
 )
 
 var (
@@ -13,21 +14,24 @@ var (
 
 // AppConfig represents the entire application configuration
 type AppConfig struct {
-    Logger    LogConfig         `mapstructure:"logger"`
-    DocAuth   map[string]string `mapstructure:"doc_auth"`
-    DNS       struct {
-        Endpoint string `mapstructure:"endpoint"`
-    } `mapstructure:"dns"`
-    DBServers struct {
-        VeDsnPsql  string `mapstructure:"ve_dsn_psql"`
-        VeDsnMysql string `mapstructure:"ve_dsn_mysql"`
-    } `mapstructure:"db_servers"`
-    Contracts struct {
-        Airdrop struct {
-            RPC     string `mapstructure:"rpc"`
-            Address string `mapstructure:"address"`
-        } `mapstructure:"airdrop"`
-    } `mapstructure:"contracts"`
+	Logger  LogConfig         `mapstructure:"logger"`
+	DocAuth map[string]string `mapstructure:"doc_auth"`
+	DNS     struct {
+		Endpoint string `mapstructure:"endpoint"`
+	} `mapstructure:"dns"`
+	DBServers struct {
+		VeDsnPsql  string `mapstructure:"ve_dsn_psql"`
+		VeDsnMysql string `mapstructure:"ve_dsn_mysql"`
+	} `mapstructure:"db_servers"`
+	Contracts struct {
+		Airdrop struct {
+			RPC     string `mapstructure:"rpc"`
+			Address string `mapstructure:"address"`
+		} `mapstructure:"airdrop"`
+	} `mapstructure:"contracts"`
+	Airdrop struct {
+		ExpireEpochs uint64 `mapstructure:"expire_epochs"`
+	} `mapstructure:"airdrop"`
 }
 
 // LogConfig represents logger configuration

@@ -40,3 +40,8 @@ contracts:
   airdrop:
     rpc: "https://eth-sepolia.public.blastapi.io"
     address: "0xcFB4AefB7B655d26420Ab9f208172F5e289F2D35"
+
+#airdrop config
+airdrop:
+  # Unclaimed airdrop expires after this many epochs, 0 disables expiry
+  expire_epochs: 6
